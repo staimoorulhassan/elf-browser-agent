@@ -10,7 +10,6 @@
   <div class="container">
     <header>
       <div class="logo">
-        <!-- Red Robot Logo -->
         <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
           <rect x="6" y="8" width="16" height="14" rx="2" fill="#EF4444"/>
           <rect x="9" y="11" width="4" height="4" rx="1" fill="white"/>
@@ -30,7 +29,6 @@
       </div>
     </header>
 
-    <!-- Provider Selection -->
     <section class="provider-section">
       <div class="section-header" id="providerToggle">
         <span>🤖 AI Provider</span>
@@ -39,9 +37,7 @@
           <path d="M4 6l4 4 4-4"/>
         </svg>
       </div>
-      
       <div class="provider-config" id="providerConfig">
-        <!-- Provider Selector -->
         <div class="form-group">
           <label for="provider">Provider</label>
           <select id="provider" class="input">
@@ -79,12 +75,8 @@
           </select>
         </div>
 
-        <!-- Dynamic fields container - will be populated based on provider -->
-        <div id="providerFields">
-          <!-- Will be filled dynamically by JS -->
-        </div>
+        <div id="providerFields"></div>
 
-        <!-- Common Settings -->
         <div class="form-group">
           <label for="model">Model</label>
           <input type="text" id="model" class="input" placeholder="claude-sonnet-4-20250514">
@@ -101,7 +93,6 @@
       </div>
     </section>
 
-    <!-- Task Input -->
     <section class="task-section">
       <div class="form-group">
         <label for="taskInput">Task Description</label>
@@ -124,7 +115,6 @@
       </div>
     </section>
 
-    <!-- Progress Section -->
     <section class="progress-section">
       <div class="stats-row">
         <div class="stat">
@@ -142,7 +132,6 @@
       </div>
     </section>
 
-    <!-- Log Section -->
     <section class="log-section">
       <div class="section-header" id="logToggle">
         <span>📋 Agent Log</span>
@@ -155,7 +144,6 @@
       </div>
     </section>
 
-    <!-- Footer -->
     <footer>
       <a href="https://github.com/staimoorulhassan/elf-browser-agent" target="_blank">GitHub</a>
       <span>•</span>
