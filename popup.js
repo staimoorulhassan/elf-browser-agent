@@ -3,6 +3,23 @@
 
 // Provider configurations - defines what fields each provider needs
 const PROVIDER_CONFIGS = {
+  pollinations: {
+    name: 'Pollinations AI',
+    fields: ['apiKey'],
+    defaultModel: 'openai',
+    models: [
+      { value: 'openai', label: 'OpenAI GPT-4o (Recommended)' },
+      { value: 'claude', label: 'Claude' },
+      { value: 'llama', label: 'Llama 3.3 70B' },
+      { value: 'qwen', label: 'Qwen' },
+      { value: 'gemini', label: 'Gemini' },
+      { value: 'mistral', label: 'Mistral' },
+      { value: 'grok', label: 'Grok' }
+    ],
+    supportsComputerUse: false,
+    requiresMultimodal: true,
+    baseUrl: 'https://text.pollinations.ai'
+  },
   anthropic: {
     name: 'Anthropic (Claude)',
     fields: ['apiKey'],
