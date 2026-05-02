@@ -68,7 +68,7 @@ Respond with the action you want to take. Always analyze the screenshot before a
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   handleMessage(message, sender, sendResponse);
-  return true; // Keep channel open for async
+  return true;
 });
 
 async function handleMessage(message, sender, sendResponse) {
@@ -88,28 +88,12 @@ async function handleMessage(message, sender, sendResponse) {
       sendResponse({ success: true });
       break;
 
-    case 'captureTab':
-      await captureVisibleTab(sendResponse);
-      return true; // Will respond async
-
-    case 'screenshotCaptured':
-      if (agentState.isRunning) {
-        await continueAgentLoop(message.screenshot);
-      }
-      break;
-
-    case 'actionExecuted':
-      if (agentState.isRunning) {
-        // Request next screenshot
-        const tab = await getActiveTab();
-        if (tab) {
-          chrome.tabs.sendMessage(tab.id, { action: 'takeScreenshot' });
-        }
-      }
-      break;
-
     case 'getPageInfo':
       sendResponse({ url: sender.tab?.url, title: sender.tab?.title });
+      break;
+
+    case 'captureTab':
+      sendResponse({ error: 'captureTab is no longer used' });
       break;
   }
 }
@@ -119,14 +103,12 @@ async function handleMessage(message, sender, sendResponse) {
 // ============================================
 
 async function startAgentLoop(task) {
-  // Load config from storage
   const stored = await chrome.storage.sync.get([
     'provider', 'apiKey', 'baseUrl', 'model', 'maxIterations',
     'accessKeyId', 'secretAccessKey', 'region', 'secretKey', 'headers'
   ]);
   config = { ...config, ...stored };
 
-  // Reset state
   agentState = {
     isRunning: true,
     currentTask: task,
@@ -140,12 +122,26 @@ async function startAgentLoop(task) {
 
   broadcastUpdate({ status: 'running', log: `Starting task: ${task}` });
 
-  // Show indicator on page
   const tab = await getActiveTab();
-  if (tab) {
-    chrome.tabs.sendMessage(tab.id, { action: 'showIndicator' });
-    // Request initial screenshot
-    chrome.tabs.sendMessage(tab.id, { action: 'takeScreenshot' });
+  if (!tab) {
+    broadcastUpdate({ error: 'No active browser tab found', status: 'idle' });
+    stopAgentLoop();
+    return;
+  }
+
+  chrome.tabs.sendMessage(tab.id, { action: 'showIndicator' });
+  await requestAndProcessScreenshot();
+}
+
+async function requestAndProcessScreenshot() {
+  if (!agentState.isRunning) return;
+
+  try {
+    const screenshotBase64 = await captureCurrentTabScreenshot();
+    await continueAgentLoop(screenshotBase64);
+  } catch (error) {
+    broadcastUpdate({ error: `Screenshot error: ${error.message}`, status: 'error' });
+    stopAgentLoop();
   }
 }
 
@@ -162,22 +158,17 @@ async function continueAgentLoop(screenshotBase64) {
   }
 
   try {
-    // Get provider API handler
     const handler = getProviderHandler(config.provider);
-    
-    // Call AI with screenshot
     const response = await handler.call(screenshotBase64);
 
-    // Track tokens
     if (response.usage) {
       agentState.tokens += (response.usage.input_tokens || 0) + (response.usage.output_tokens || 0);
       broadcastUpdate({ tokens: agentState.tokens });
     }
 
-    // Check if task is complete
     if (response.isComplete) {
-      broadcastUpdate({ 
-        complete: true, 
+      broadcastUpdate({
+        complete: true,
         log: 'Task completed successfully!',
         status: 'idle'
       });
@@ -185,26 +176,20 @@ async function continueAgentLoop(screenshotBase64) {
       return;
     }
 
-    // Execute actions
     if (response.actions && response.actions.length > 0) {
       for (const action of response.actions) {
         broadcastUpdate({ log: `Action: ${action.action || action.type}` });
         await executeComputerAction(action);
         agentState.actions++;
         broadcastUpdate({ actions: agentState.actions });
-        await sleep(200); // Small delay between actions
+        await sleep(200);
       }
     }
 
-    // Request next screenshot if still running
     if (agentState.isRunning) {
-      const tab = await getActiveTab();
-      if (tab) {
-        await sleep(300); // Wait for page to update
-        chrome.tabs.sendMessage(tab.id, { action: 'takeScreenshot' });
-      }
+      await sleep(300);
+      await requestAndProcessScreenshot();
     }
-
   } catch (error) {
     broadcastUpdate({ error: `API Error: ${error.message}`, status: 'error' });
     stopAgentLoop();
@@ -213,7 +198,7 @@ async function continueAgentLoop(screenshotBase64) {
 
 function stopAgentLoop() {
   agentState.isRunning = false;
-  
+
   getActiveTab().then(tab => {
     if (tab) {
       chrome.tabs.sendMessage(tab.id, { action: 'hideIndicator' });
@@ -222,7 +207,6 @@ function stopAgentLoop() {
 
   broadcastUpdate({ status: 'idle' });
 }
-
 // ============================================
 // Provider Handlers
 // ============================================
@@ -889,24 +873,43 @@ function getDefaultBaseUrl(provider) {
   return urls[provider] || '';
 }
 
-async function captureVisibleTab(sendResponse) {
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab) {
-      sendResponse({ error: 'No active tab' });
-      return;
-    }
-
-    const screenshot = await chrome.tabs.captureVisibleTab(tab.windowId, {
-      format: 'png',
-      quality: 90
-    });
-
-    sendResponse({ screenshot });
-  } catch (error) {
-    sendResponse({ error: error.message });
+async function captureCurrentTabScreenshot() {
+  const tab = await getActiveTab();
+  if (!tab) {
+    throw new Error('No active tab');
   }
+
+  const screenshot = await chrome.tabs.captureVisibleTab(tab.windowId, {
+    format: 'png',
+    quality: 90
+  });
+
+  if (!screenshot) {
+    throw new Error('Failed to capture screenshot');
+  }
+
+  return screenshot.split(',')[1] || '';
 }
+
+
+
+chrome.runtime.onInstalled.addListener(async () => {
+  try {
+    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+  } catch (error) {
+    console.warn('Side panel behavior unavailable:', error);
+  }
+});
+
+chrome.action.onClicked.addListener(async (tab) => {
+  try {
+    if (tab?.id) {
+      await chrome.sidePanel.open({ tabId: tab.id });
+    }
+  } catch (error) {
+    console.warn('Failed to open side panel:', error);
+  }
+});
 
 async function executeComputerAction(action) {
   const tab = await getActiveTab();

@@ -4,11 +4,11 @@
 // Listen for messages from background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   switch (message.action) {
-    case 'takeScreenshot':
-      captureScreenshot().then(sendResponse);
+    case 'executeAction':
+      executeComputerAction(message.computerAction).then(sendResponse);
       return true;
 
-    case 'executeAction':
+    case 'performAction':
       executeComputerAction(message.computerAction).then(sendResponse);
       return true;
 
@@ -18,27 +18,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-// Capture screenshot of the visible viewport
-async function captureScreenshot() {
-  // Request screenshot from background (content scripts can't use chrome.tabs.captureVisibleTab)
-  return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ action: 'captureTab' }, (response) => {
-      if (response && response.screenshot) {
-        // Extract base64 data from data URL
-        const base64 = response.screenshot.split(',')[1];
-        // Send to background to continue agent loop
-        chrome.runtime.sendMessage({
-          action: 'screenshotCaptured',
-          screenshot: base64
-        });
-        resolve({ success: true });
-      } else {
-        resolve({ error: response?.error || 'Failed to capture screenshot' });
-      }
-    });
-  });
-}
-
 // Execute computer action
 async function executeComputerAction(action) {
   const actionType = action.action;
@@ -47,8 +26,7 @@ async function executeComputerAction(action) {
   try {
     switch (actionType) {
       case 'screenshot':
-        // Handled separately
-        result = await captureScreenshot();
+        result = { success: true, action: 'screenshot' };
         break;
 
       case 'left_click':
@@ -109,15 +87,12 @@ async function performClick(action) {
   }
 
   const [x, y] = coordinates;
-
-  // Create and dispatch mouse events at the specified coordinates
   const element = document.elementFromPoint(x, y);
   
   if (element) {
     const clientX = x;
     const clientY = y;
 
-    // Simulate mouse events
     const mouseDownEvent = new MouseEvent('mousedown', {
       bubbles: true,
       cancelable: true,
@@ -161,7 +136,6 @@ async function performClick(action) {
       element.dispatchEvent(clickEvent);
     }
 
-    // Focus the element if it's focusable
     if (element.focus && typeof element.focus === 'function') {
       element.focus();
     }
@@ -178,7 +152,6 @@ async function performType(action) {
     return { error: 'Missing text for type action' };
   }
 
-  // Type character by character
   for (const char of text) {
     const keydownEvent = new KeyboardEvent('keydown', {
       key: char,
@@ -201,7 +174,6 @@ async function performType(action) {
     document.activeElement?.dispatchEvent(keydownEvent);
     document.activeElement?.dispatchEvent(keypressEvent);
     
-    // Also set value directly for input elements
     if (document.activeElement && 'value' in document.activeElement) {
       document.activeElement.value += char;
       document.activeElement.dispatchEvent(inputEvent);
@@ -209,13 +181,12 @@ async function performType(action) {
       document.execCommand('insertText', false, char);
     }
 
-    await sleep(20 + Math.random() * 30); // Randomize timing a bit
+    await sleep(20 + Math.random() * 30);
   }
 
   return { success: true, action: 'type', textLength: text.length };
 }
 
-// Normalize key names
 const keyMap = {
   'CTRL': 'Control',
   'CONTROL': 'Control',
@@ -241,15 +212,12 @@ const keyMap = {
   'ALT': 'Alt'
 };
 
-// Perform key press action
 async function performKeyPress(action) {
   let key = action.text || action.key;
-  
-  // Normalize key name
   key = keyMap[key.toUpperCase()] || key;
 
   const keyboardEventInit = {
-    key: key,
+    key,
     bubbles: true,
     cancelable: true
   };
@@ -261,72 +229,53 @@ async function performKeyPress(action) {
   await sleep(50);
   document.activeElement?.dispatchEvent(keyupEvent);
 
-  // Handle special keys
   if (key === 'Enter') {
     document.activeElement?.dispatchEvent(new Event('submit', { bubbles: true }));
   }
 
-  return { success: true, action: 'key', key: key };
+  return { success: true, action: 'key', key };
 }
 
-// Perform scroll action
 async function performScroll(action) {
   const direction = (action.scroll_direction || action.direction || 'down').toLowerCase();
   const amount = action.scroll_amount || action.amount || 1;
-  
-  const deltaMultiplier = 100; // Pixels per scroll unit
+  const deltaMultiplier = 100;
   let deltaX = 0;
   let deltaY = 0;
 
   switch (direction) {
-    case 'up':
-      deltaY = -amount * deltaMultiplier;
-      break;
-    case 'down':
-      deltaY = amount * deltaMultiplier;
-      break;
-    case 'left':
-      deltaX = -amount * deltaMultiplier;
-      break;
-    case 'right':
-      deltaX = amount * deltaMultiplier;
-      break;
+    case 'up': deltaY = -amount * deltaMultiplier; break;
+    case 'down': deltaY = amount * deltaMultiplier; break;
+    case 'left': deltaX = -amount * deltaMultiplier; break;
+    case 'right': deltaX = amount * deltaMultiplier; break;
   }
 
   const wheelEvent = new WheelEvent('wheel', {
-    deltaX: deltaX,
-    deltaY: deltaY,
+    deltaX,
+    deltaY,
     bubbles: true,
     cancelable: true
   });
 
   document.dispatchEvent(wheelEvent);
-
-  // Also try window.scrollBy as backup
   window.scrollBy(deltaX, deltaY);
 
   return { success: true, action: 'scroll', direction, amount };
 }
 
-// Perform drag action
 async function performDrag(action) {
   const endCoordinates = action.coordinate || action.coordinates;
-  
   if (!endCoordinates || endCoordinates.length < 2) {
     return { error: 'Missing end coordinates for drag' };
   }
 
   const [endX, endY] = endCoordinates;
-  
-  // Default start from viewport center
   const startX = action.startX || window.innerWidth / 2;
   const startY = action.startY || window.innerHeight / 2;
-
   const startElement = document.elementFromPoint(startX, startY);
   const endElement = document.elementFromPoint(endX, endY);
 
   if (startElement) {
-    // Create drag events
     const mouseDown = new MouseEvent('mousedown', {
       bubbles: true,
       cancelable: true,
@@ -358,7 +307,6 @@ async function performDrag(action) {
   return { success: true, action: 'drag', from: [startX, startY], to: [endX, endY] };
 }
 
-// Get cursor position (not really applicable in browser, return center)
 async function getCursorPosition() {
   return {
     success: true,
@@ -366,7 +314,6 @@ async function getCursorPosition() {
   };
 }
 
-// Get page info
 function getPageInfo() {
   return {
     url: window.location.href,
@@ -378,12 +325,10 @@ function getPageInfo() {
   };
 }
 
-// Utility: sleep function
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Add visual indicator when agent is active
 let indicatorElement = null;
 
 chrome.runtime.onMessage.addListener((message) => {
