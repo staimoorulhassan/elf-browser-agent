@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ELF - Browser Agent</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">
+        <!-- Red Robot Logo -->
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="6" y="8" width="16" height="14" rx="2" fill="#EF4444"/>
+          <rect x="9" y="11" width="4" height="4" rx="1" fill="white"/>
+          <rect x="15" y="11" width="4" height="4" rx="1" fill="white"/>
+          <rect x="8" y="4" width="3" height="5" rx="1.5" fill="#DC2626"/>
+          <rect x="17" y="4" width="3" height="5" rx="1.5" fill="#DC2626"/>
+          <rect x="10" y="18" width="8" height="2" rx="1" fill="#B91C1C"/>
+          <circle cx="14" cy="26" r="1" fill="#EF4444"/>
+          <path d="M10 22V24" stroke="#EF4444" stroke-width="2" stroke-linecap="round"/>
+          <path d="M18 22V24" stroke="#EF4444" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <h1>ELF</h1>
+      </div>
+      <div class="status-badge" id="statusBadge">
+        <span class="status-dot"></span>
+        <span class="status-text">Idle</span>
+      </div>
+    </header>
+
+    <!-- Provider Selection -->
+    <section class="provider-section">
+      <div class="section-header" id="providerToggle">
+        <span>🤖 AI Provider</span>
+        <span class="provider-name" id="currentProvider">Anthropic</span>
+        <svg class="chevron" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M4 6l4 4 4-4"/>
+        </svg>
+      </div>
+      
+      <div class="provider-config" id="providerConfig">
+        <!-- Provider Selector -->
+        <div class="form-group">
+          <label for="provider">Provider</label>
+          <select id="provider" class="input">
+            <optgroup label="Native Computer Use">
+              <option value="anthropic">Anthropic (Claude)</option>
+            </optgroup>
+            <optgroup label="OpenAI Compatible">
+              <option value="openai">OpenAI (GPT-4o)</option>
+              <option value="openai-compatible">OpenAI Compatible (Custom)</option>
+              <option value="deepseek">DeepSeek</option>
+              <option value="together">Together AI</option>
+              <option value="groq">Groq</option>
+              <option value="cerebras">Cerebras</option>
+            </optgroup>
+            <optgroup label="Google">
+              <option value="google">Google AI (Gemini)</option>
+            </optgroup>
+            <optgroup label="Amazon">
+              <option value="bedrock">AWS Bedrock</option>
+            </optgroup>
+            <optgroup label="Chinese Providers">
+              <option value="qwen">Qwen (Alibaba)</option>
+              <option value="kimi">Kimi (Moonshot)</option>
+              <option value="zhipu">Zhipu AI (GLM)</option>
+              <option value="baidu">Baidu (ERNIE)</option>
+            </optgroup>
+            <optgroup label="Other">
+              <option value="mistral">Mistral AI</option>
+              <option value="xai">xAI (Grok)</option>
+              <option value="custom">Custom Endpoint</option>
+            </optgroup>
+          </select>
+        </div>
+
+        <!-- Dynamic fields container - will be populated based on provider -->
+        <div id="providerFields">
+          <!-- Will be filled dynamically by JS -->
+        </div>
+
+        <!-- Common Settings -->
+        <div class="form-group">
+          <label for="model">Model</label>
+          <input type="text" id="model" class="input" placeholder="claude-sonnet-4-20250514">
+        </div>
+
+        <div class="form-group">
+          <label for="maxIterations">Max Iterations</label>
+          <input type="number" id="maxIterations" class="input" value="50" min="1" max="200">
+        </div>
+
+        <button id="saveConfig" class="btn btn-secondary">
+          <span>Save Configuration</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Task Input -->
+    <section class="task-section">
+      <div class="form-group">
+        <label for="taskInput">Task Description</label>
+        <textarea id="taskInput" class="input textarea" placeholder="e.g., Go to Google and search for the latest AI news..." rows="3"></textarea>
+      </div>
+
+      <div class="button-group">
+        <button id="startBtn" class="btn btn-primary">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M4 2l10 6-10 6V2z"/>
+          </svg>
+          <span>Start Agent</span>
+        </button>
+        <button id="stopBtn" class="btn btn-danger" disabled>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <rect x="3" y="3" width="10" height="10" rx="1"/>
+          </svg>
+          <span>Stop</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Progress Section -->
+    <section class="progress-section">
+      <div class="stats-row">
+        <div class="stat">
+          <span class="stat-value" id="iterationCount">0</span>
+          <span class="stat-label">Iterations</span>
+        </div>
+        <div class="stat">
+          <span class="stat-value" id="actionCount">0</span>
+          <span class="stat-label">Actions</span>
+        </div>
+        <div class="stat">
+          <span class="stat-value" id="tokenCount">0</span>
+          <span class="stat-label">Tokens</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Log Section -->
+    <section class="log-section">
+      <div class="section-header" id="logToggle">
+        <span>📋 Agent Log</span>
+        <svg class="chevron collapsed" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M4 6l4 4 4-4"/>
+        </svg>
+      </div>
+      <div class="log-container collapsed" id="logContainer">
+        <div id="agentLog"></div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <a href="https://github.com/your-repo" target="_blank">Documentation</a>
+      <span>•</span>
+      <span id="version">v1.0.0</span>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
